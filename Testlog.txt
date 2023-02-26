@@ -1,0 +1,362 @@
+Command: 	  EQUATE  PG0,>0010
+Command: USBDSR  MODEL   USBSM	
+Command: USBSM   DEVICE  USBROM,ROMPG0,USBRAM
+Command: ROMPG0  BLOCK   >4000,>1000,0,0,1,PG0
+Command: USBROM  BLOCK   >4000,>1000,3,10,1,~RAM
+Command: RAMPG0  BLOCK   >5000,>1000,0,0,1
+Command: USBRAM  BLOCK   >5000,>1000,3,10,1,RAM
+Command:  	  LOAD   "Stub.o" 
+New segment STUB
+New DEF SGBL
+New DEF SGBLWP
+New DEF SGRT
+New DEF SGB
+New DEF SGRTWP
+New DEF GETDAT
+New DEF ATR11
+New DEF ATR14
+New DEF PG0RT
+New DEF SGBLX
+New DEF SGRTX
+New DEF ATR11X
+New DEF RAMPG
+Skipping REF to THISPG
+Skipping REF to PG4SEG
+Command: 	  LOAD   "Stdmem.o"	
+New segment STDMEM
+New REF SGRTWP
+New REF ATR14
+New REF RAMPG
+New DEF MALLOC
+New DEF FREE
+New DEF MCOPY
+New DEF NEWWS
+New DEF BURNW
+New DEF TOSLOT
+New DEF ATSLOT
+New DEF TOR13
+New DEF ATR13
+New DEF LOCKDS
+New DEF VSBR
+New DEF VSBW
+New DEF VMBR
+New DEF VWTR
+New DEF VIBW
+Command: 	  LOAD   "HC.o"
+New segment $DATA
+New segment USBHC
+New REF SGBLWP
+New REF MALLOC
+New REF FREE
+New REF MCOPY
+New DEF HCW
+New DEF HCW2
+New DEF HCWI
+New DEF HCW2I
+New DEF HCWIM
+New DEF HCR
+New DEF HCR2
+New DEF ITLR
+New DEF ITLW
+New DEF ATLR
+New DEF ATLW
+Command:    	  GHOST  $DATA
+Ghosting $DATA
+Command: 	  LOAD   "OHCI.o"
+New segment $DATA
+New segment OHCID
+New DEF OHCI
+New DEF OPENPI
+New DEF CLOSPI
+New DEF ABORPI
+New DEF ADDRQ
+New REF SGBLWP
+Skipping REF to PG4SEG
+New REF SGRTWP
+New REF MALLOC
+New REF FREE
+New REF ATSLOT
+New REF NEWWS
+New REF MCOPY
+New REF RHINIT
+Command: 	  LOAD   "Root.o"
+New segment $DATA
+New segment ROOTH
+New DEF RHINIT
+New REF MCOPY
+Skipping REF to PG4SEG
+New REF SGBLWP
+New REF HCW2
+New REF HCR2
+Command: 	  LOAD   "Usbd.o"
+New segment $DATA
+New segment USBD
+New DEF USBPW1
+Skipping REF to PG4SEG
+New REF SGBLWP
+New REF SGRTWP
+New REF ATR14
+New REF ATR11
+New REF PG0RT
+New REF NEWWS
+New REF ATSLOT
+New REF MALLOC
+New REF FREE
+New REF MCOPY
+New REF RHINIT
+New REF OPENPI
+New REF CLOSPI
+New REF ABORPI
+New REF ADDRQ
+Command: 	  STUB   USBROM,STUB
+Command: 	  SEGFLAGS $DATA,RAM
+Command: 	  STRATEGY FIRST
+Command:         SELECT USBDSR
+Command:         SEGTAB	
+Command:         SYMTAB
+Command:         OUTPUT "USB-PG?P.EA5",EA5,ROMPG0,USBROM
+Dispatching segments...
+Dispatching STDMEM to block USBROM[3] at >417C
+Dispatching ROOTH to block USBROM[3] at >4A66
+Dispatching USBHC to block USBROM[4] at >417C
+Dispatching OHCID to block USBROM[5] at >417C
+Dispatching $DATA to block USBRAM[3] at >5000
+Warning: Segment $PSEG has size 0
+Segment USBD unassigned
+Not all segments could be assigned
+Fixing symbol table...
+Solving REF SGRTWP >12
+Solving REF ATR14 >1E
+Solving REF RAMPG >32
+Solving REF SGBLWP >6
+Solving REF MALLOC >2
+Solving REF FREE >6
+Solving REF MCOPY >A
+Solving REF ATSLOT >1A
+Solving REF NEWWS >E
+Solving REF RHINIT >0
+Solving REF HCW2 >0
+Solving REF HCR2 >C
+Solving REF ATR11 >1A
+Solving REF PG0RT >22
+Solving REF OPENPI >D6
+Solving REF CLOSPI >410
+Solving REF ABORPI >40C
+Solving REF ADDRQ >214
+Loading code...
+Loading code from object file 'Stub.o'
+Loading segment STUB
+CSEG 2 >0
+PSEG >0
+Fixing REF chain THISPG
+Label PG4SEG REFered but not used
+Loading code from object file 'Stdmem.o'
+Loading segment STDMEM
+CSEG 2 >0
+CSEG 2 >8E8
+PSEG >0
+Fixing REF chain SGRTWP
+Fixing REF chain ATR14
+Fixing REF chain RAMPG
+Loading code from object file 'HC.o'
+Loading segment $DATA
+Loading segment USBHC
+DSEG >0
+DSEG >80
+DSEG >100
+DSEG >11C
+DSEG >21A
+DSEG >298
+DSEG >2DC
+DSEG >36A
+DSEG >390
+DSEG >3A6
+DSEG >3C6
+DSEG >3F0
+DSEG >404
+DSEG >43C
+DSEG >44C
+DSEG >532
+DSEG >552
+DSEG >560
+PSEG >0
+CSEG 2 >0
+PSEG >0
+Fixing REF chain SGBLWP
+Fixing REF chain MALLOC
+Fixing REF chain FREE
+Fixing REF chain MCOPY
+Loading code from object file 'OHCI.o'
+Loading segment $DATA
+Loading segment OHCID
+DSEG >0
+DSEG >80
+DSEG >100
+DSEG >11C
+DSEG >21A
+DSEG >298
+DSEG >2DC
+DSEG >36A
+DSEG >390
+DSEG >3A6
+DSEG >3C6
+DSEG >3F0
+DSEG >404
+DSEG >43C
+DSEG >44C
+DSEG >532
+DSEG >552
+DSEG >560
+PSEG >0
+CSEG 2 >0
+PSEG >0
+Fixing REF chain SGBLWP
+Fixing REF chain SGRTWP
+Fixing REF chain MALLOC
+Fixing REF chain FREE
+Fixing REF chain ATSLOT
+Fixing REF chain NEWWS
+Fixing REF chain MCOPY
+Fixing REF chain RHINIT
+Fixing PG4SEG chain
+Loading code from object file 'Root.o'
+Loading segment $DATA
+Loading segment ROOTH
+DSEG >0
+DSEG >80
+DSEG >100
+DSEG >11C
+DSEG >21A
+DSEG >298
+DSEG >2DC
+DSEG >36A
+DSEG >390
+DSEG >3A6
+DSEG >3C6
+DSEG >3F0
+DSEG >404
+DSEG >43C
+DSEG >44C
+DSEG >532
+DSEG >552
+DSEG >560
+PSEG >0
+CSEG 2 >0
+PSEG >0
+Fixing REF chain MCOPY
+Fixing REF chain SGBLWP
+Fixing REF chain HCW2
+Fixing REF chain HCR2
+Fixing PG4SEG chain
+Loading code from object file 'Usbd.o'
+Loading segment $DATA
+Loading segment USBD
+DSEG >0
+DSEG >80
+DSEG >100
+DSEG >11C
+DSEG >21A
+DSEG >298
+DSEG >2DC
+DSEG >36A
+DSEG >390
+DSEG >3A6
+DSEG >3C6
+DSEG >3F0
+DSEG >404
+DSEG >43C
+DSEG >44C
+DSEG >532
+DSEG >552
+DSEG >560
+PSEG >0
+CSEG 2 >0
+PSEG >0
+Fixing REF chain SGBLWP
+Fixing REF chain SGRTWP
+Fixing REF chain ATR14
+Fixing REF chain ATR11
+Fixing REF chain PG0RT
+Fixing REF chain NEWWS
+Fixing REF chain ATSLOT
+Fixing REF chain MALLOC
+Fixing REF chain FREE
+Fixing REF chain MCOPY
+Fixing REF chain RHINIT
+Fixing REF chain OPENPI
+Fixing REF chain CLOSPI
+Fixing REF chain ABORPI
+Fixing REF chain ADDRQ
+Fixing PG4SEG chain
+
+Segment	Size	Address	Page 
+----------------------------
+$PSEG	0	0 	0
+STUB	17C	4000 	0
+STDMEM	8EA	417C 	3
+$DATA	562	5000 	3
+USBHC	5CA	417C 	4
+OHCID	AFE	417C 	5
+ROOTH	546	4A66 	3
+USBD	15B8	0 	0
+
+
+Label	Value	Type	Segment
+--------------------------------
+SGBL	2	W	1
+SGBLWP	6	W	1
+SGRT	A	W	1
+SGB	E	W	1
+SGRTWP	12	W	1
+GETDAT	16	W	1
+ATR11	1A	W	1
+ATR14	1E	W	1
+PG0RT	22	W	1
+SGBLX	26	W	1
+SGRTX	2A	W	1
+ATR11X	2E	W	1
+RAMPG	32	W	1
+MALLOC	2	W	1
+FREE	6	W	1
+MCOPY	A	W	1
+NEWWS	E	W	1
+BURNW	12	W	1
+TOSLOT	16	W	1
+ATSLOT	1A	W	1
+TOR13	1E	W	1
+ATR13	22	W	1
+LOCKDS	26	W	1
+VSBR	600	W	1
+VSBW	604	W	1
+VMBR	608	W	1
+VWTR	610	W	1
+VIBW	614	W	1
+HCW	0	W	1
+HCW2	0	W	1
+HCWI	4	W	1
+HCW2I	4	W	1
+HCWIM	8	W	1
+HCR	C	W	1
+HCR2	C	W	1
+ITLR	10	W	1
+ITLW	14	W	1
+ATLR	18	W	1
+ATLW	1C	W	1
+OHCI	0	W	1
+OPENPI	D6	W	1
+CLOSPI	410	W	1
+ABORPI	40C	W	1
+ADDRQ	214	W	1
+RHINIT	0	W	1
+USBPW1	2AA	W	1
+
+Label	Value	Type	Segment
+--------------------------------
+SGRTWP	12	X	1
+ATR14	1E	X	1
+RAMPG	32	X	1
+SGBLWP	6	X	1
+MALLOC	2	X	1
+FREE	6	X	1
+MCOPY	A	X	1
+AT

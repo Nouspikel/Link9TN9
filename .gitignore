@@ -1,0 +1,6 @@
+Debug/
+Release/
+*.ea5
+*.old
+*.o
+*.exe

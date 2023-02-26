@@ -1,0 +1,28 @@
+ 	  LOGFILE "Testlog.txt",ie
+	  VERBOUS 4
+        ECHO "this is a test"
+	  EQUATE  PG0,>0010
+
+USBDSR  MODEL   USBSM	
+USBSM   DEVICE  USBROM,ROMPG0,USBRAM
+ROMPG0  BLOCK   >4000,>1000,0,0,1,PG0
+USBROM  BLOCK   >4000,>1000,3,10,1,~RAM&~PG0
+RAMPG0  BLOCK   >5000,>1000,0,0
+USBRAM  BLOCK   >5000,>1000,3,10,1,RAM
+
+	  LOAD   "Stub0.o"
+	  LOAD   "Page0.o"
+        SEGFLAGS PAGE0,PG0
+ 	  LOAD   "Stub3.o" 
+	  LOAD   "Stdmem.o"
+	  LOAD   "HC.o"
+ 	  SEGFLAGS $DATA,RAM
+        LIBRARY "Testlib.txt"
+	  STUB   USBROM,STUB
+	  STUB   ROMPG0,STUB0
+	  STRATEGY FLAGVAL(7)
+        SELECT USBDSR
+
+        SEGTAB	
+        SYMTAB
+        OUTPUT "USB-PG?P.EA5",EA5,ROMPG0,USBROM

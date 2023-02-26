@@ -1,0 +1,16 @@
+ 		LOGFILE "Testlog.txt",ie
+		VERBOUS 3
+USBDSR  MODEL   USBSM	
+USBSM   DEVICE  USBROM,USBRAM
+USBROM  BLOCK   >4000,>0FFF,0,100
+USBRAM  BLOCK   >5000,>0FFF,0,100
+   	  MEMTAB
+	  LOAD   "Stdmem.o"	
+ 	  LOAD   "Stub3.o"
+	  STUB   USBROM,STUB
+	  STRATEGY LARGEST
+        FIND   2LA,,1
+        SEGTAB	
+        SYMTAB
+        OUTPUT "Test.EA5"
+        FIND   2MP,USBROM,0
