@@ -17,7 +17,7 @@ public:
 	int m_Bottom;									// buffer startpoint after partial loading from a file
 	int m_Number;									// local number
 	int m_Flags;									// loading flags
-	int m_Special;									// special flags
+	int m_Special;									// special flags: 1=stub 2=ghost
 	CList m_Thispg;									// refs to THISPG for stub segments
 
 	CSegment();										// default constuctor

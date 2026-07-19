@@ -33,7 +33,7 @@ CBlock::~CBlock()
 //----------------------------------------------------------------------------------
 // Constuctor, with parameters for block
 //----------------------------------------------------------------------------------
-CBlock::CBlock(char *Name, int Address, int ToAddr, int Page=0, int ToPage=0, int Step=1)
+CBlock::CBlock(char *Name, int Address, int ToAddr, int Page=0, int ToPage=0, int Step=1, int Memtype=0)
 {
 	strcpy(m_Name,Name);
 	m_Name[7]=0x00;
@@ -43,7 +43,7 @@ CBlock::CBlock(char *Name, int Address, int ToAddr, int Page=0, int ToPage=0, in
 	m_ToPage=ToPage;
 	m_Step=Step;
 	m_Type=BT_BLOCK;
-	m_MemType=0;
+	m_MemType=Memtype;
 	m_Condition=NULL;
 	m_Overlay=0;
 }
@@ -56,14 +56,14 @@ CBlock::CBlock(char* Name, int Type)
 	strcpy(m_Name,Name);
 	m_Name[7]=0x00;
 	m_Type=Type;
-	m_Address=m_ToAddr=m_Bottom=m_Top=m_Page=m_ToPage=0;
+	m_Address=m_ToAddr=m_Bottom=m_Top=m_Page=m_ToPage=m_Step=m_MemType=0;
 	m_Condition=NULL;
 }
 
 //----------------------------------------------------------------------------------
 // Ulterior definition of block characteristics
 //----------------------------------------------------------------------------------
-void CBlock::Define(int Address, int ToAddr, int Page, int ToPage, int Step)
+void CBlock::Define(int Address, int ToAddr, int Page, int ToPage, int Step, int Memtype)
 {
 	m_Address=m_Bottom=Address;
 	m_ToAddr=m_Top=ToAddr;
@@ -122,7 +122,7 @@ CBlockList::~CBlockList()
 //----------------------------------------------------------------------------------
 // Add a new block to list
 //----------------------------------------------------------------------------------
-CBlock* CBlockList::AddBlock(char* Name, int Address, int ToAddr, int Page, int ToPage, int Step)
+CBlock* CBlockList::AddBlock(char* Name, int Address, int ToAddr, int Page, int ToPage, int Step, int Memtype)
 {
 	CBlock* pBlock;
 
@@ -133,7 +133,7 @@ CBlock* CBlockList::AddBlock(char* Name, int Address, int ToAddr, int Page, int 
 		return NULL;
 	}
 
-	pBlock = new CBlock(Name,Address,ToAddr,Page,ToPage,Step);					// no: create new 
+	pBlock = new CBlock(Name,Address,ToAddr,Page,ToPage,Step,Memtype);		// no: create new 
 
 	m_Blocks.Add((PTR)pBlock);												// add to list
 
@@ -151,7 +151,7 @@ CBlock* CBlockList::Find(char* Name, int Type)
 	for(i=0;i<m_Blocks.GetSize();i++)										// iterate whole list
 	{
 		pBlock=(CBlock*)m_Blocks.GetAt(i);									// get one block
-		if(strstr(pBlock->m_Name,Name)==NULL) continue;						// different name
+		if(strcmp(pBlock->m_Name,Name)!=0) continue;						// different name
 		if((Type>0)&&(pBlock->m_Type!=Type)) continue;						// different type
 
 		return pBlock;														// found, return it
@@ -208,8 +208,8 @@ CBlock* CBlockList::OutputTable(char* Types, int *pCount)
 
 	if(pCount==NULL)
 	{
-		cout << "Block\tType\tContents\n----------------------\n";				// header
-		if(g_Log&0x01) g_Logfile << "\nBlock\tType\tContents\n----------------------\n";				// header
+		cout << "Block\tType\tContents\n------------------------\n";				// header
+		if(g_Log&0x01) g_Logfile << "\nBlock\tType\tContents\n------------------------\n";				// header
 	}
 
 	if((Types==NULL)||(strchr(Types,'m'))||(strchr(Types,'M')))
@@ -293,13 +293,21 @@ CBlock* CBlockList::OutputTable(char* Types, int *pCount)
 				cout.setf(ios::hex|ios::uppercase);
 				cout << pBlock->m_Name << "\t BLOCK \t" << pBlock->m_Address << "," <<pBlock->m_ToAddr << ",";
 				cout.unsetf(ios::hex);
-				cout <<pBlock->m_Page <<"," << pBlock->m_ToPage << "\n";
+				cout << pBlock->m_Page << "," << pBlock->m_ToPage << "," << pBlock->m_Step  << "," << pBlock->m_MemType;
+				if(pBlock->m_Condition)
+					cout  << "," << pBlock->m_Condition  << "\n";
+				else
+					cout << "\n";
 				if(g_Log&0x01)												// list to logfile, if requested
 				{
 					g_Logfile.setf(ios::hex|ios::uppercase);
 					g_Logfile << pBlock->m_Name << "\t BLOCK \t" << pBlock->m_Address << "," <<pBlock->m_ToAddr << ",";
 					g_Logfile.unsetf(ios::hex);
-					g_Logfile <<pBlock->m_Page <<"," << pBlock->m_ToPage << "\n";
+					g_Logfile << pBlock->m_Page << "," << pBlock->m_ToPage << "," << pBlock->m_Step  << "," << pBlock->m_MemType;
+					if(pBlock->m_Condition)
+						g_Logfile  << "," << pBlock->m_Condition  << "\n";
+					else
+						g_Logfile << "\n";
 				}
 			}
 		}

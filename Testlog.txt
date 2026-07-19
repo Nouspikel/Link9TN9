@@ -117,10 +117,10 @@ Command:         SYMTAB
 Command:         OUTPUT "USB-PG?P.EA5",EA5,ROMPG0,USBROM
 Dispatching segments...
 Dispatching STDMEM to block USBROM[3] at >417C
-Dispatching ROOTH to block USBROM[3] at >4A66
+Dispatching $DATA to block USBROM[3] at >4A66
 Dispatching USBHC to block USBROM[4] at >417C
+Dispatching ROOTH to block USBROM[4] at >4746
 Dispatching OHCID to block USBROM[5] at >417C
-Dispatching $DATA to block USBRAM[3] at >5000
 Warning: Segment $PSEG has size 0
 Segment USBD unassigned
 Not all segments could be assigned
@@ -294,10 +294,10 @@ Segment	Size	Address	Page
 $PSEG	0	0 	0
 STUB	17C	4000 	0
 STDMEM	8EA	417C 	3
-$DATA	562	5000 	3
+$DATA	562	4A66 	3
 USBHC	5CA	417C 	4
 OHCID	AFE	417C 	5
-ROOTH	546	4A66 	3
+ROOTH	546	4746 	4
 USBD	15B8	0 	0
 
 

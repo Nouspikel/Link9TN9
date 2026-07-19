@@ -25,6 +25,9 @@ CScriptfile::CScriptfile()
 	m_Equates.Append("RAM",0x2000);
 	m_Equates.Append("NVRAM",0x4000);
 	m_Equates.Append("OVL",0x8000);
+	m_Equates.Append("M_CPU",0);
+	m_Equates.Append("M_GRAM",1);
+	m_Equates.Append("M_VDP",2);
 	m_Equates.Append("$PSEG",0x00010000);
 	m_Equates.Append("$DSEG",0x00020000);
 	m_Equates.Append("$CSEG",0x00040000);
@@ -119,7 +122,7 @@ int CScriptfile::ParseLine(char* pLine)
 	char Name[81];
 	char Ftype[4];
 	char* pChr;
-	int Address,ToAddr,Page,ToPage,Step,i,j,Type,ptr=0,Segout,on,off,Value;
+	int Address=0,ToAddr=0,Page=0,ToPage=0,Step,Memtype=0,i,j,Type,ptr=0,Segout,on,off,Value;
 	CObjectfile *pObject=NULL;
 	CBlock *pBlock, *pChild;
 	CSegment *pSegment;
@@ -149,14 +152,14 @@ int CScriptfile::ParseLine(char* pLine)
 		}
 	}
 
-//	LOAD
-//	----
-	if(strstr(Command,"LOAD")!=NULL)											// load tagged object file
+//	LOAD or GETDEF
+//	--------------
+	if((strcmp(Command,"LOAD")==0)||(strcmp(Command,"GETDEF")==0))			// load tagged object file
 	{
 		GetQuotedstring(Name,80,pLine,&ptr);
 		if((Value=_stat(Name,&buf))!=0)											// check if file exists
 		{																		// it does not
-			for(j=i=0;(i<256)&&(j<80);i++)										// search the library path
+			for(j=i=0;(i<256)&&(j<80);i++)										// search the object file path
 			{
 				if((m_Path[i]==';')||(m_Path[i]==0x00))							// end of one path
 				{
@@ -180,25 +183,49 @@ int CScriptfile::ParseLine(char* pLine)
 			return g_ErrLevel;
 		}
 		pObjectfile=new CObjectfile(Name);										// create file object
-		m_Objectfiles.Add((PTR)pObjectfile);									// add it to lists
-		pObjectfile->FirstPass(&m_Segments,&m_Defs,&m_Refs,&m_Aorgs,m_PsegName);	// first pass on this file
+		if(strcmp(Command,"LOAD")==0)										// LOAD command
+		{
+			m_Objectfiles.Add((PTR)pObjectfile);									// add it to lists
+			pObjectfile->FirstPass(&m_Segments,&m_Defs,&m_Refs,&m_Aorgs,m_PsegName);	// first pass on this file
+		}
+		else																	// GETDEF command
+		{
+			pObjectfile->FirstPass(&m_Segments,&m_Defs,&m_Refs,&m_Aorgs,m_PsegName,1);	// first pass on this file
+			delete pObjectfile;													// not needed any more
+		}
 	}
 
 
 //	BLOCK
 //	-----
-	else if(strstr(Command,"BLOCK")!=NULL)										// define memory block
+	else if(strcmp(Command,"BLOCK")==0)										// define memory block
 	{
 		Address=GetMath(pLine,&ptr,&m_Equates,&m_Defs);
 		if(pLine[ptr]==',')														// address,size syntax
+		{
+			ptr++;																// skipt the comma
 			ToAddr=Address+GetMath(pLine,&ptr,&m_Equates,&m_Defs)-1;			// calculate end address
-		else
-			ToAddr=GetMath(pLine,&ptr,&m_Equates,&m_Defs);						// from-to syntax
-		Page=GetMath(pLine,&ptr,&m_Equates,&m_Defs);							
+		}
+		else if(pLine[ptr]==':')
+		{
+			ptr++;																// skipt the : sign
+			ToAddr=GetMath(pLine,&ptr,&m_Equates,&m_Defs);						// from:to syntax
+		}
+		if(pLine[ptr]==',')	
+		{
+			ptr++;																// skipt the comma
+			Page=GetMath(pLine,&ptr,&m_Equates,&m_Defs);							
+		}
 		if(pLine[ptr]==',')														// page,number syntax
+		{
+			ptr++;																// skipt the comma
 			ToPage=Page+GetMath(pLine,&ptr,&m_Equates,&m_Defs)-1;	
-		else
-			ToPage=GetMath(pLine,&ptr,&m_Equates,&m_Defs);						// first-last syntax
+		}
+		else if(pLine[ptr]==':')
+		{
+			ptr++;																// skipt the : sign
+			ToPage=GetMath(pLine,&ptr,&m_Equates,&m_Defs);						// first:last syntax
+		}
 
 		Step=0;
 		if(pLine[ptr]==',')														
@@ -209,9 +236,16 @@ int CScriptfile::ParseLine(char* pLine)
 			else Step=-1;														// negative if order inverted
 		}
 
+		if(pLine[ptr]==',')														// memory type
+		{
+			ptr++;																// skipt the : sign
+			Memtype=GetMath(pLine,&ptr,&m_Equates,&m_Defs);						// first:last syntax
+		}
+
+
 		if((pBlock=m_Blocks.Find(Label,BT_NONE))!=NULL)							// see if previously referred to
 		{
-			pBlock->Define(Address,ToAddr,Page,ToPage,Step);					// yes: finish block definition
+			pBlock->Define(Address,ToAddr,Page,ToPage,Step,Memtype);			// yes: finish block definition
 		}
 		else if(m_Blocks.Find(Label,BT_BLOCK)!=NULL)							// see if already defined
 		{
@@ -221,16 +255,18 @@ int CScriptfile::ParseLine(char* pLine)
 		}
 		else
 		{
-			m_Blocks.AddBlock(Label,Address,ToAddr,Page,ToPage,Step);			// create new block
+			pBlock=m_Blocks.AddBlock(Label,Address,ToAddr,Page,ToPage,Step,Memtype);	// create new block
 		}
-		if(pLine[ptr]==',')
+		if((pLine[ptr]==',')&&(pBlock))
+		{
 			pBlock->m_Condition=_strdup(pLine+ptr+1);							// copy rest of line into block's condition
+		}
 	}
 
 
 //	DEVICE
 //	------
-	else if(strstr(Command,"DEVICE")!=NULL)										// define memory device
+	else if(strcmp(Command,"DEVICE")==0)										// define memory device
 	{
 		if((pBlock=m_Blocks.Find(Label,BT_NONE))!=NULL)							// see if previously referred to
 			pBlock->m_Type=BT_DEVICE;											// yes: make it a device
@@ -251,7 +287,7 @@ int CScriptfile::ParseLine(char* pLine)
 
 //	MODEL
 //	-----
-	else if(strstr(Command,"MODEL")!=NULL)										// define memory model
+	else if(strcmp(Command,"MODEL")==0)										// define memory model
 	{
 		pBlock=m_Blocks.AddDevice(Label,BT_MODEL);								// add it to chain
 		if(pBlock==NULL) return g_ErrLevel;										// error
@@ -271,7 +307,7 @@ int CScriptfile::ParseLine(char* pLine)
 
 //	SELECT
 //	------
-	else if(strstr(Command,"SELECT")!=NULL)										// select blocks to be used
+	else if(strcmp(Command,"SELECT")==0)										// select blocks to be used
 	{
 		if(pLine[ptr]=='!')														// wipe existing list
 		{
@@ -334,7 +370,7 @@ int CScriptfile::ParseLine(char* pLine)
 
 //	STRATEGY
 //	--------
-	else if(strstr(Command,"STRATEGY")!=NULL)									// segment iteration strategy
+	else if(strcmp(Command,"STRATEGY")==0)									// segment iteration strategy
 	{
 		i=ptr;
 		if(GetLabel(Label,8,pLine,&ptr)==i) return 0;							// get strategy name
@@ -393,7 +429,7 @@ int CScriptfile::ParseLine(char* pLine)
 
 //	LIBRARY
 //	-------
-	else if(strstr(Command,"LIBRARY")!=NULL)									// remember library files
+	else if(strcmp(Command,"LIBRARY")==0)									// remember library files
 	{
 		GetQuotedstring(Name,80,pLine,&ptr);									// grab name
 		if((Value=_stat(Name,&buf))!=0)											// check if file exists
@@ -430,16 +466,16 @@ int CScriptfile::ParseLine(char* pLine)
 
 //	OUTPUT
 //	------
-	else if(strstr(Command,"OUTPUT")!=NULL)										// remember output files
+	else if(strcmp(Command,"OUTPUT")==0)										// remember output files
 	{
 		GetQuotedstring(Name,80,pLine,&ptr);									// get file name
 		Type=1;																	// default
 		if(GetParam(Label,4,pLine,&ptr,',')>0)									// get file type
 		{
-			if(strstr(Label,"EA5")) Type=1;										// parse file types
-			else if(strstr(Label,"GK")) Type=2;
-			else if(strstr(Label,"FB6")) Type=3;
-			else if(strstr(Label,"BIN")) Type=4;
+			if(strcmp(Label,"EA5")) Type=1;										// parse file types
+			else if(strcmp(Label,"GK")) Type=2;
+			else if(strcmp(Label,"FB6")) Type=3;
+			else if(strcmp(Label,"BIN")) Type=4;
 			else Type=0;
 		}
 
@@ -548,7 +584,7 @@ int CScriptfile::ParseLine(char* pLine)
 
 //	LOGFILE
 //	-------
-	else if(strstr(Command,"LOGFILE")!=NULL)									// load tagged object file
+	else if(strcmp(Command,"LOGFILE")==0)									// load tagged object file
 	{
 		GetQuotedstring(Name,80,pLine,&ptr);
 		g_Logfile.open(Name);
@@ -574,7 +610,7 @@ int CScriptfile::ParseLine(char* pLine)
 
 //	STUB
 //	----
-	else if(strstr(Command,"STUB")!=NULL)										// declare stub segments
+	else if(strcmp(Command,"STUB")==0)										// declare stub segments
 	{
 		if(GetParam(Name,8,pLine,&ptr,',')<=0) return 0;						// get memory block
 		if((pBlock=m_Blocks.Find(Name,BT_BLOCK))==NULL)
@@ -619,21 +655,21 @@ int CScriptfile::ParseLine(char* pLine)
 
 //	MINGAP
 //	------
-	else if(strstr(Command,"MINGAP")!=NULL)										// minimum gap size
+	else if(strcmp(Command,"MINGAP")==0)										// minimum gap size
 	{
 		m_MinGap=GetMath(pLine,&ptr,&m_Equates,&m_Defs);						// get value 
 	}
 
 //	MAXSIZE
 //	-------
-	else if(strstr(Command,"MAXSIZE")!=NULL)									// maximum file size (without header)
+	else if(strcmp(Command,"MAXSIZE")==0)									// maximum file size (without header)
 	{
 		m_MaxSize=GetMath(pLine,&ptr,&m_Equates,&m_Defs);						// get value 
 	}
 
 //	EQUATE
 //	------
-	else if(strstr(Command,"EQUATE")!=NULL)										// internal label definition
+	else if(strcmp(Command,"EQUATE")==0)										// internal label definition
 	{
 		if(GetParam(Label,8,pLine,&ptr,',')<=0) return 0;						// get label name
 		Value=GetMath(pLine,&ptr,&m_Equates,&m_Defs);							// get (new) value 
@@ -643,7 +679,7 @@ int CScriptfile::ParseLine(char* pLine)
 	
 //	DEFINE
 //	-----
-	else if(strstr(Command,"DEFINE")!=NULL)										// DEF label (re)definition
+	else if(strcmp(Command,"DEFINE")==0)										// DEF label (re)definition
 	{
 		if(GetParam(Label,8,pLine,&ptr,',')<=0) return 0;						// get label name
 		Value=GetMath(pLine,&ptr,&m_Equates,&m_Defs);							// get (new) value 
@@ -661,7 +697,7 @@ int CScriptfile::ParseLine(char* pLine)
 
 //	SEGTAB
 //	------
-	else if(strstr(Command,"SEGTAB")!=NULL)										// display segment table
+	else if(strcmp(Command,"SEGTAB")==0)										// display segment table
 	{
 		i=GetMath(pLine,&ptr,&m_Equates);										// get pass number
 		if(i==1) m_Segments.OutputTable();										// output table now
@@ -671,7 +707,7 @@ int CScriptfile::ParseLine(char* pLine)
 	
 //	SYMTAB
 //	------
-	else if(strstr(Command,"SYMTAB")!=NULL)										// display symbol table
+	else if(strcmp(Command,"SYMTAB")==0)										// display symbol table
 	{
 		if(GetParam(Name,8,pLine,&ptr,',')<=0)									// get flags
 			strcpy(Name,"3456VWXYZ");											// nothing means all of them
@@ -690,7 +726,7 @@ int CScriptfile::ParseLine(char* pLine)
 	
 //	MEMTAB
 //	------
-	else if(strstr(Command,"MEMTAB")!=NULL)										// display segment table
+	else if(strcmp(Command,"MEMTAB")==0)										// display segment table
 	{
 		if(GetParam(Name,8,pLine,&ptr,',')<=0)									// get flags
 			strcpy(Name,"mdb");													// nothing means all of them
@@ -703,7 +739,7 @@ int CScriptfile::ParseLine(char* pLine)
 
 //	SEGFLAGS
 //	--------
-	else if(strstr(Command,"SEGFLAGS")!=NULL)									// change segment flags
+	else if(strcmp(Command,"SEGFLAGS")==0)									// change segment flags
 	{
 		i=GetParam(Name,8,pLine,&ptr,',');										// get segment name (can have wildcards)
 
@@ -728,7 +764,7 @@ int CScriptfile::ParseLine(char* pLine)
 
 //	SEGMENT
 //	-------
-	else if(strstr(Command,"SEGMENT")!=NULL)									// use PSEG as a distinct segment
+	else if(strcmp(Command,"SEGMENT")==0)									// use PSEG as a distinct segment
 	{
 		if(GetParam(m_PsegName,8,pLine,&ptr,',')<=0) return 0;					// get segment name for PSEG segment
 		if(pLine[ptr]==',')														// flag value provided
@@ -742,7 +778,7 @@ int CScriptfile::ParseLine(char* pLine)
 
 //	SEGEND
 //	------
-	else if(strstr(Command,"SEGEND")!=NULL)										// change segment flags
+	else if(strcmp(Command,"SEGEND")==0)										// change segment flags
 	{
 		strcpy(m_PsegName,"$PSEG");												// revert to default PSEG
 	}
@@ -750,7 +786,7 @@ int CScriptfile::ParseLine(char* pLine)
 	
 //	GHOST
 //	-----
-	else if(strstr(Command,"GHOST")!=NULL)										// declare ghost segments
+	else if(strcmp(Command,"GHOST")==0)										// declare ghost segments
 	{
 		j=0;
 		do																		// process list of segments
@@ -781,7 +817,7 @@ int CScriptfile::ParseLine(char* pLine)
 
 //	ASSIGN
 //	------
-	else if(strstr(Command,"ASSIGN")!=NULL)										// assign a segment to a block
+	else if(strcmp(Command,"ASSIGN")==0)										// assign a segment to a block
 	{
 		GetParam(Label,8,pLine,&ptr,',');										// get segment name
 		pSegment=m_Segments.Find(Label);										// find segment
@@ -838,7 +874,7 @@ int CScriptfile::ParseLine(char* pLine)
 
 //	OVERLAY
 //	-------
-	else if(strstr(Command,"OVERLAY")!=NULL)									// reserve a block for overlays
+	else if(strcmp(Command,"OVERLAY")==0)									// reserve a block for overlays
 	{
 		GetParam(Name,8,pLine,&ptr,',');										// get block name
 		if((pBlock=m_Blocks.Find(Name,BT_BLOCK))==NULL)
@@ -903,7 +939,7 @@ int CScriptfile::ParseLine(char* pLine)
 
 // DISPATCH
 // ---------
-	else if(strstr(Command,"DISPATCH")!=NULL)									// dispatch segments to blocks
+	else if(strcmp(Command,"DISPATCH")==0)									// dispatch segments to blocks
 	{
 		Value=0;
 		if(GetParam(Label,8,pLine,&ptr,',')>0)									// get flags											
@@ -934,7 +970,7 @@ int CScriptfile::ParseLine(char* pLine)
 
 //	VERIFY
 //	------
-	else if(strstr(Command,"VERIFY")!=NULL)										// verify segment data
+	else if(strcmp(Command,"VERIFY")==0)										// verify segment data
 	{
 		if(GetParam(Label,8,pLine,&ptr,',')<=0) return 0;						// get segment name
 		Address=GetMath(pLine,&ptr,&m_Equates,&m_Defs);							// get address in segment
@@ -959,7 +995,7 @@ int CScriptfile::ParseLine(char* pLine)
 
 //	PATCH
 //	-----
-	else if(strstr(Command,"PATCH")!=NULL)										// patch segment data
+	else if(strcmp(Command,"PATCH")==0)										// patch segment data
 	{
 		if(GetParam(Label,8,pLine,&ptr,',')<=0) return 0;						// get segment name
 		Address=GetMath(pLine,&ptr,&m_Equates,&m_Defs,&m_Refs);					// get address in segment
@@ -989,7 +1025,7 @@ int CScriptfile::ParseLine(char* pLine)
 	
 //	FIND
 //	----
-	else if(strstr(Command,"FIND")!=NULL)										// find something
+	else if(strcmp(Command,"FIND")==0)										// find something
 	{
 		i=ptr;																	// remember for later
 		if(GetParam(Ftype,8,pLine,&ptr)==0)										// grab type of search S LD LR LU LE LA MM MD MB
@@ -1013,7 +1049,7 @@ int CScriptfile::ParseLine(char* pLine)
 
 //	ECHO
 //	----
-	else if(strstr(Command,"ECHO")!=NULL)										// display info on screen
+	else if(strcmp(Command,"ECHO")==0)										// display info on screen
 	{
 		while(ptr<255)															// process entire line
 		{
@@ -1029,12 +1065,12 @@ int CScriptfile::ParseLine(char* pLine)
 			{
 				i=GetParam(Label,8,pLine,&ptr,',');								// get variable name
 				if(i<=0) continue;												// none: ignore
-				if(strstr(Label,"\\nl")||strstr(Label,"\\NL"))					// newline
+				if(strcmp(Label,"\\nl")||strcmp(Label,"\\NL"))					// newline
 				{
 					cout << "\n";
 					if(g_Log&0x01) g_Logfile << "\n";							
 				}
-				else if(strstr(Label,"\\t")||strstr(Label,"\\T"))				// tab
+				else if(strcmp(Label,"\\t")||strcmp(Label,"\\T"))				// tab
 				{
 					cout << "\t";
 					if(g_Log&0x01) g_Logfile  << "\t";
@@ -1068,35 +1104,35 @@ int CScriptfile::ParseLine(char* pLine)
 
 //	STOP
 //	----
-	else if(strstr(Command,"STOP")!=NULL)										// end script before end of file
+	else if(strcmp(Command,"STOP")==0)										// end script before end of file
 	{
 		return 666;																// special code to indicate stop and no error
 	}
 
 //	IDLE
 //	----
-	else if(strstr(Command,"IDLE")!=NULL)										// end script before end of file, don't process
+	else if(strcmp(Command,"IDLE")==0)										// end script before end of file, don't process
 	{
 		return 777;																// special code to indicate no processing
 	}
 
 // PROCESS
 // -------
-	else if(strstr(Command,"PROCESS")!=NULL)									// end of script processing
+	else if(strcmp(Command,"PROCESS")==0)									// end of script processing
 	{
 		Process();																// fix symbols, search libraries, load code, dispatch, generate files
 	}
 
 // MATCHREFS
 // ---------
-	else if(strstr(Command,"MATCHREFS")!=NULL)									// see that all REF labels have a matching DEF
+	else if(strcmp(Command,"MATCHREFS")==0)									// see that all REF labels have a matching DEF
 	{
 		MatchRefs(&m_Refs,&m_Defs);												
 	}
 
 // NBUNDEF
 // -------
-	else if(strstr(Command,"NBUNDEF")!=NULL)									// count number of undefined labels
+	else if(strcmp(Command,"NBUNDEF")==0)									// count number of undefined labels
 	{
 		if(pLine[ptr]=='S')														// include SREFs
 			Value=m_Refs.CountUndef(1);
@@ -1109,21 +1145,21 @@ int CScriptfile::ParseLine(char* pLine)
 
 // SEARCHLIB
 // ---------
-	else if(strstr(Command,"SEARCHLIB")!=NULL)									// search libraries to try fixing undefined labels
+	else if(strcmp(Command,"SEARCHLIB")==0)									// search libraries to try fixing undefined labels
 	{
 		SearchLib(&m_Libraries,&m_Segments,&m_Defs,&m_Refs,&m_Aorgs,m_PsegName);	
 	}
 
 // FIXTAB
 // ---------
-	else if(strstr(Command,"FIXTAB")!=NULL)										// fix symbol table (define REFs, fix relative addresses)
+	else if(strcmp(Command,"FIXTAB")==0)										// fix symbol table (define REFs, fix relative addresses)
 	{
 		FixSymtab(&m_Defs,&m_Refs,&m_Segments);										
 	}
 
 // GETCODE
 // ---------
-	else if(strstr(Command,"GETCODE")!=NULL)									// load code into memory
+	else if(strcmp(Command,"GETCODE")==0)									// load code into memory
 	{
 		Value=3;																// default flags
 		i=GetParam(Label,8,pLine,&ptr,',');										// get flags
@@ -1138,14 +1174,14 @@ int CScriptfile::ParseLine(char* pLine)
 
 // GENERATE
 // ---------
-	else if(strstr(Command,"GETCODE")!=NULL)									// issue Memimage file(s)
+	else if(strcmp(Command,"GENERATE")==0)									// issue Memimage file(s)
 	{
 		Generate(&m_Selected,&m_Blocks.m_Blocks);									
 	}
 
 // ERRORS
 // ------
-	else if(strstr(Command,"ERRORS")!=NULL)										// set error level
+	else if(strcmp(Command,"ERRORS")==0)										// set error level
 	{
 		if(pLine[ptr])															// make sure there is an argument
 		{
@@ -1156,7 +1192,7 @@ int CScriptfile::ParseLine(char* pLine)
 
 // VERBOUS
 // -------
-	else if(strstr(Command,"VERBOUS")!=NULL)									// set verbousness level
+	else if(strcmp(Command,"VERBOUS")==0)									// set verbousness level
 	{
 		if(pLine[ptr])															// make sure there is an argument
 		{
@@ -1167,7 +1203,7 @@ int CScriptfile::ParseLine(char* pLine)
 
 // LIBPATH
 // -------
-	else if(strstr(Command,"LIBPATH")!=NULL)									// library path
+	else if(strcmp(Command,"LIBPATH")==0)									// library path
 	{
 		GetQuotedstring(Name,80,pLine,&ptr);									// grab file path
 		if(strlen(Name)+strlen(m_LibPath)>254)
@@ -1188,7 +1224,7 @@ int CScriptfile::ParseLine(char* pLine)
 
 // PATH
 // ----
-	else if(strstr(Command,"PATH")!=NULL)										// file path
+	else if(strcmp(Command,"PATH")==0)										// file path
 	{
 		GetQuotedstring(Name,80,pLine,&ptr);									// grab file path
 		if(strlen(Name)+strlen(m_Path)>254)
@@ -1209,7 +1245,7 @@ int CScriptfile::ParseLine(char* pLine)
 
 // SCRIPT
 // ------
-	else if(strstr(Command,"SCRIPT")!=NULL)										// nested script
+	else if(strcmp(Command,"SCRIPT")==0)										// nested script
 	{
 		GetQuotedstring(Name,80,pLine,&ptr);									// grab file name
 								
@@ -1225,7 +1261,7 @@ int CScriptfile::ParseLine(char* pLine)
 
 // JOB
 // ---
-	else if(strstr(Command,"JOB")!=NULL)										// nested script
+	else if(strcmp(Command,"JOB")==0)										// nested script
 	{
 		GetQuotedstring(Name,80,pLine,&ptr);									// grab file name
 								
@@ -1245,7 +1281,7 @@ int CScriptfile::ParseLine(char* pLine)
 
 // HELP
 // ----
-	else if((strstr(Command,"HELP")!=NULL)||(strcmp(Command,"?")==0))			// display help screen 
+	else if((strcmp(Command,"HELP")==0)||(strcmp(Command,"?")==0))			// display help screen 
 	{
 		cout << "Syntax: link99.exe              Enter interactive mode. Use @ before label. End with EXIT or ABORT\n";
 		cout << "  or    link99.exe filename     Execute linker script\n";
@@ -2240,7 +2276,7 @@ int CScriptfile::Dispatch(CBlock* pBlock, int wipe)
 {
 	int i,j,p,size,page,more,morepages,ptr,horiz=0,maxval,toobig;
 	CList *pList,*pPageSegs=NULL,*pSegList;
-	CSegment *pSeg,*pBig;
+	CSegment *pSeg,*pBest;
 	CList Stack;
 	CBlock *pBlock2;
 
@@ -2378,7 +2414,7 @@ int CScriptfile::Dispatch(CBlock* pBlock, int wipe)
 			size-=pBlock->GetPageSize(p);										// minus stub and already loaded code
 			pPageSegs=(CList*)pBlock->m_Pages.GetAt(p);							// in case page already exists (NULL otherwise)
 
-			for(j=toobig=0,pBig=NULL,maxval=0;;j++)								// segment loop
+			for(j=toobig=0,pBest=NULL,maxval=0;;j++)							// segment loop
 			{
 				if(j<pSegList->GetSize())										// inside the list
 				{
@@ -2398,39 +2434,39 @@ int CScriptfile::Dispatch(CBlock* pBlock, int wipe)
 
 					if(m_Strategy==-2)											// strategy = largest
 					{
-						if((pBig==NULL)||(pSeg->m_Size>pBig->m_Size))			// first or larger than current
-							pBig=pSeg;											// make it current biggest
+						if((pBest==NULL)||(pSeg->m_Size>pBest->m_Size))			// first or larger than current
+							pBest=pSeg;											// make it current biggest
 						if(j<pSegList->GetSize()-1)	continue;					// end of list not reached
 						j=-1;													// to restart from 0 next iteration
-						pSeg=pBig;												// largest of all
-						pBig=NULL;												// reset ptr for next time
+						pSeg=pBest;												// largest of all
+						pBest=NULL;												// reset ptr for next time
 					}
 					else if(m_Strategy==-3)										// strategy = smallest
 					{
-						if((pBig==NULL)||(pSeg->m_Size<pBig->m_Size))			// first or smaller than current
-							pBig=pSeg;											// make it current smallest
+						if((pBest==NULL)||(pSeg->m_Size<pBest->m_Size))			// first or smaller than current
+							pBest=pSeg;											// make it current smallest
 						if(j<pSegList->GetSize()-1)	continue;					// end of list not reached
 						j=-1;													// to restart from 0 next iteration
-						pSeg=pBig;												// largest of all
-						pBig=NULL;												// reset ptr for next time
+						pSeg=pBest;												// smallest of all
+						pBest=NULL;												// reset ptr for next time
 					}
 					else if(m_Strategy>0)										// strategy = flagval
 					{
-						if((pBig==NULL)||(pSeg->m_Flags&m_Strategy>maxval))		// first or better than current
+						if((pBest==NULL)||(pSeg->m_Flags&m_Strategy>maxval))	// first or better than current
 						{
-							pBig=pSeg;											// make it current best
+							pBest=pSeg;											// make it current best
 							maxval=pSeg->m_Flags&m_Strategy;					// remember top value so far
 						}
 						if(j<pSegList->GetSize()-1)	continue;					// end of list not reached
 						j=-1;													// to restart from 0 next iteration
-						pSeg=pBig;												// largest of all
-						pBig=NULL;												// reset ptr for next time
+						pSeg=pBest;												// largest of all
+						pBest=NULL;												// reset ptr for next time
 					}
 				}
-				else if(pBig!=NULL)												// list done (last segment rejected)
+				else if(pBest!=NULL)											// list done (last segment rejected)
 				{
-					pSeg=pBig;													// proceed with largest
-					pBig=NULL;													// don't do it again
+					pSeg=pBest;													// proceed with largest
+					pBest=NULL;													// don't do it again
 				}
 				else break;														// exit segment loop
 
@@ -2615,7 +2651,8 @@ int CScriptfile::Match(char* s, char* Pattern)
 			if(s[i]==0x00) return 1;											// announce success
 			break;																// incomplete: announce mismatch
 		case '$':																// $ any label letter (or $ itself)
-			if((s[i]=='$')||((s[i]>='A')&&(s[i]<='Z'))) continue;				// match, next char, next pattern
+			if((s[i]>='A')&&(s[i]<='Z')) continue;								// match, next char, next pattern
+			if(s[i]=='$') continue;
 			if(s[i]=='_') continue;
 			break;																// mismatch: exit switch
 		case '#':																// # any decimal digit
@@ -2628,10 +2665,11 @@ int CScriptfile::Match(char* s, char* Pattern)
 		case '?':																// ? any label character
 			if((s[i]>='0')&&(s[i]<='9')) continue;
 			if((s[i]>='A')&&(s[i]<='Z')) continue;
+			if(s[i]=='$') continue;
 			if(s[i]=='_') continue;
 			break;
 		case '+':																// + 0 or more of the previous pattern
-			if(Match(s+i,Pattern+j+1)) return 1;								// match current char with next pattern
+			if(Match(s+i,Pattern+j+1)) return 1;								// match current char with next pattern (0 occurences)
 			next=Pattern[j+1];													// in case pattern is finished
 			if(j>0)																// on first char + is same as *
 			{
@@ -2640,10 +2678,10 @@ int CScriptfile::Match(char* s, char* Pattern)
 				continue;
 			}																	// fall through
 		case '*':																// * 0 or more of any char
-			if(Match(s+i,Pattern+j+1)) return 1;								// match current char with next pattern
+			if(Match(s+i,Pattern+j+1)) return 1;								// match current char with next pattern (0 occurences)
 			next=Pattern[j+1];													// in case pattern is finished
 			j--;																// next char, stay on *
-			continue;
+			continue;															// always match
 			break;
 		case '\\':																// escape character 
 			j=j+1;																// use next patter char as regular text

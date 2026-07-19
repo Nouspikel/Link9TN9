@@ -6,7 +6,7 @@ class CLabel
 {
 public:
 	int m_Undefined;			// flag: label is undefined
-	char m_Name[7];				// 6-char label name
+	char m_Name[9];				// 8-char label name
 	int m_Value;				// label value or first link for REFs
 	int m_SegIdx;				// index of segment in segment list
 	char m_Type;				// type of label (tag)

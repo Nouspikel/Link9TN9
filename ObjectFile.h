@@ -9,18 +9,22 @@ class CObjectfile
 protected:
 	ifstream m_File;								// file stream
 public:
+	int m_Offset;
+	int m_Start;
 	~CObjectfile();
 	char* m_Filename;
 	char m_PsegName[9];
 //	CObjectfile* m_pNext;
 	CObjectfile();									// default constructor
 	CObjectfile(char* filename);					// constructor with filename
-	int FirstPass(CSegmentList *pSegments,CLabelList *pDefs, CLabelList *pRefs, CAorgList *pAorgs, char *PsegName);		// first pass parser
+	int FirstPass(CSegmentList *pSegments,CLabelList *pDefs, CLabelList *pRefs, CAorgList *pAorgs, char *PsegName, int GetDefs=0);		// first pass parser
 	int SecondPass(CSegmentList *pSegments,CLabelList *pDefs, CLabelList *pRefs, CAorgList *pAorgs);		// second pass parser
 	void Seek(int offset=0);						// rewind file
 protected:
 	int GetHex(int count=4);						// get hex value
 	int GetLabel(char* pBuf, int size=6);			// get label ID
+	int m_HasCR;
+	int m_Compressed;
 };
 
 /////////////////////////////////////////////////////////////////////////////////////

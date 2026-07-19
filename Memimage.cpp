@@ -310,6 +310,9 @@ int CMemimage::OutputCode(CList* pSelected, CList* pBlocks)
 		} // next page
 	} // next block
 
+	if(m_File.is_open())
+		m_File.close();														// close last file object, if any
+
 	return 0;
 }
 
@@ -429,8 +432,8 @@ int CMemimage::NewFile(int Size, int Address, int More, char* pBlockname, int Pa
 	m_File.open(m_Realname,ios::binary);									// open memory image file
 	if(!m_File)																// file error
 	{
-		cout << "Cannot open Memimage file " << m_Realname << "\n";
-		if(g_Log&0x02) g_Logfile << "Cannot open Memimage file " << m_Realname << "\n";
+		cout << "Cannot open Memimage file '" << m_Realname << "'\n";
+		if(g_Log&0x02) g_Logfile << "Cannot open Memimage file '" << m_Realname << "'\n";
 		return 1;
 	}
 	if(g_Verbous>=4) 
@@ -485,6 +488,7 @@ int CMemimage::NewFile(int Size, int Address, int More, char* pBlockname, int Pa
 		m_File.put((char)((Address>>8)&0xFF));								// then address
 		m_File.put((char)((Address)&0xFF));
 	}
+
 
 	return 0;
 

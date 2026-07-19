@@ -20,6 +20,7 @@ extern int g_Log;
 CObjectfile::CObjectfile()
 {
 	m_Filename=NULL;
+	m_Compressed=m_HasCR=m_Start=0;
 }
 
 //----------------------------------------------------------------------------------
@@ -36,6 +37,7 @@ CObjectfile::CObjectfile(char* filename)
 	}
 	m_Filename=_strdup(filename);										// save filename
 	strcpy(m_PsegName,"$PSEG");											// initialize default PSEG name
+	m_Compressed=m_HasCR=m_Start=0;
 }
 
 //----------------------------------------------------------------------------------
@@ -63,14 +65,28 @@ int CObjectfile::GetHex(int count)
 	int i,res=0;
 	char c;
 
-	for(i=0;i<count;i++)
-	{
-		m_File.get(c);
-		if(c<'0') return -1;
-		else if(c<='9') res=(res*16)+(int)(c-'0');
-		else if((c<'A')||(c>'F')) return -1;
-		else res=(res*16)+(int)(c-'A')+10;
+	if(m_Compressed)													// compressed mode: binary bytes
+	{	
+		for(i=0;i<count;i+=2)											// one byte = 2 chars
+		{
+			m_File.get(c);												// grab one byte
+			res=(res*16)+c;
+		}
+		m_Offset+=count/2;												// count used bytes
 	}
+	else																// uncompressed: hex nibbles
+	{
+		for(i=0;i<count;i++)											// decode hex digits
+		{
+			m_File.get(c);												// grab one char
+			if(c<'0') return -1;										// illegal
+			else if(c<='9') res=(res*16)+(int)(c-'0');					
+			else if((c<'A')||(c>'F')) return -1;						// illegal
+			else res=(res*16)+(int)(c-'A')+10;
+		}
+		m_Offset+=count;												// count used chars 
+	}
+
 	return res;
 }
 
@@ -85,13 +101,15 @@ int CObjectfile::GetLabel(char* pBuf, int size)
 
 	for(i=0;(i<size)&&(pBuf[i]>' ');i++);
 	pBuf[i]=0;
+
+	m_Offset+=m_File.gcount();
 	return (m_File.gcount()==size);
 }
 
 //----------------------------------------------------------------------------------
 // First pass, grab segments and labels
 //----------------------------------------------------------------------------------
-int CObjectfile::FirstPass(CSegmentList *pSegments, CLabelList *pDefs, CLabelList *pRefs, CAorgList *pAorgs, char *PsegName)
+int CObjectfile::FirstPass(CSegmentList *pSegments, CLabelList *pDefs, CLabelList *pRefs, CAorgList *pAorgs, char *PsegName, int GetDefs)
 {
 	char tag;
 	char ModuleName[9];
@@ -101,16 +119,22 @@ int CObjectfile::FirstPass(CSegmentList *pSegments, CLabelList *pDefs, CLabelLis
 	int size,number,value,current;
 	CLabel *pLab;
 	CAorg *pAorg=NULL;
+	CSegment *pSeg=NULL;
 
 	m_File.get(tag);
-	if(tag=='>') return 2;							// text libraries: link to object file				
-	else if(tag!='0')
+	m_Offset++;
+	if(tag=='>') return 2;							// text libraries: link to object file
+	else if(tag==0)									// >00 means compressed mode
+	{
+		m_Compressed=1;
+	}
+	else if(tag!='0')								// '0' means uncompressed, all other values are illegal			
 	{
 		cout << "Wrong object file format (no tag 0)\n";
 		if(g_Log&0x02) g_Logfile << "Wrong object file format (no tag 0)\n";
 		return 1;
 	}
-	size=GetHex();
+	size=GetHex();									// $PSEG size
 	if(size<0)
 	{
 		cout << "Wrong object file format (no PSEG size)\n";
@@ -124,12 +148,16 @@ int CObjectfile::FirstPass(CSegmentList *pSegments, CLabelList *pDefs, CLabelLis
 		return 1;
 	}
 
-	pSegments->Append(PsegName,size);				// create default program segment
-	strcpy(m_PsegName,PsegName);					// remember for 2nd pass, in case if waas renamed with SEGMENT command
+	if(!GetDefs)									// ignored when getting DEF labels only
+	{
+		pSegments->Append(PsegName,size);			// create default program segment
+		strcpy(m_PsegName,PsegName);				// remember for 2nd pass, in case if was renamed with SEGMENT command
+	}
 
 	while(!m_File.eof())
 	{
 		m_File.get(tag);
+		m_Offset++;
 		number=0;									// trick for multiple entries
 		if(g_Verbous>4) 
 		{
@@ -160,11 +188,14 @@ int CObjectfile::FirstPass(CSegmentList *pSegments, CLabelList *pDefs, CLabelLis
 				if(g_Log&0x02) g_Logfile<<"Wrong segment number (tag M)\n";
 				return 1;
 			}
-			pSegments->Append(Name,size,'M',number);	// create or update segment
-			if(g_Verbous>=4) 
+			if(!GetDefs)
 			{
-				cout << "New segment " << Name << "\n";
-				if(g_Log&0x01) g_Logfile << "New segment " << Name << "\n";
+				pSegments->Append(Name,size,'M',number);	// create or update segment
+				if(g_Verbous>=4) 
+				{
+					cout << "New segment " << Name << "\n";
+					if(g_Log&0x01) g_Logfile << "New segment " << Name << "\n";
+				}
 			}
 			break;
 		case '3':									// REF in PSEG
@@ -207,6 +238,7 @@ int CObjectfile::FirstPass(CSegmentList *pSegments, CLabelList *pDefs, CLabelLis
 				}
 				break;
 			}
+			if(GetDefs) break;						// ignore when getting DEF labels only
 			if((tag=='3')||(tag=='3'))				// label in PSEG
 				pLab=pRefs->Append(Name,-1,tag,pSegments->FindIndex(PsegName));	// create REF label in PSEG or redirected segment
 			else
@@ -229,7 +261,7 @@ int CObjectfile::FirstPass(CSegmentList *pSegments, CLabelList *pDefs, CLabelLis
 				if(g_Log&0x02) g_Logfile<<"Illegal label value (tag "<< tag << ")\n";
 				return 1;
 			}
-			if(!GetLabel(Name))						// segment name
+			if(!GetLabel(Name))						// label name
 			{
 				cout<<"Wrong label name (tag "<< tag << ")\n";
 				if(g_Log&0x02) g_Logfile<<"Wrong label name (tag "<< tag << ")\n";
@@ -254,9 +286,19 @@ int CObjectfile::FirstPass(CSegmentList *pSegments, CLabelList *pDefs, CLabelLis
 				cout << "New DEF " << Name << "\n";
 				if(g_Log&0x01) g_Logfile << "New DEF " << Name << "\n";
 			}
+			if((pSeg=pSegments->Find(Name)))		// find a segment with matching name
+			{
+				pSeg->m_Flags=value;				// use as segment flags
+				if(g_Verbous>=4) 
+				{
+					cout << "DEF label used as segment flags\n";
+					if(g_Log&0x01) g_Logfile << "DEF label used as segment flags\n";
+				}
+			}
 			break;
 		case '9':									// new AORG pointer
 			current=GetHex();						// get it
+			if(GetDefs) break;						// ignore when getting DEF labels only
 			pAorg=pAorgs->Append(current);			// increase slot
 			if(g_Verbous>=4) 
 			{
@@ -273,6 +315,7 @@ int CObjectfile::FirstPass(CSegmentList *pSegments, CLabelList *pDefs, CLabelLis
 			break;
 		case 'B':			// data word
 			value=GetHex();
+			if(GetDefs) break;						// ignore when getting DEF labels only
 			if(pAorg!=NULL)
 			{
 				pAorg->Include(current);
@@ -291,6 +334,17 @@ int CObjectfile::FirstPass(CSegmentList *pSegments, CLabelList *pDefs, CLabelLis
 			GetHex();		
 			break;
 		case 'F':			// end of record
+			if(m_HasCR) break;	// expecting endlines
+			while(m_Offset%80)	// skip to end of line or 80 characters
+			{
+				m_File.get(tag);
+				if((tag==0x0D)||(tag=0x0F))
+				{
+					m_HasCR;	// remember file has endlines
+					break;	// stop counting
+				}
+				m_Offset++;	// count all other chars
+			}
 			break;	
 		case 'I':			// program ID
 			GetLabel(ProgramID,8);
@@ -306,6 +360,8 @@ int CObjectfile::FirstPass(CSegmentList *pSegments, CLabelList *pDefs, CLabelLis
 			return 0;
 		case 0x0D:			// end of line (PC text format)
 		case 0x0A:
+			m_HasCR=1;		// remember this file has endlines
+			m_Offset--;		// these don't count as characters
 			break;
 		case 'J':			// sybol table dump
 			GetHex();
@@ -639,6 +695,17 @@ int CObjectfile::SecondPass(CSegmentList *pSegments, CLabelList *pDefs, CLabelLi
 			GetHex();		
 			break;
 		case 'F':										// end of record
+			if(m_HasCR) break;	// expecting endlines
+			while(m_Offset%80)	// skip to end of line or 80 characters
+			{
+				m_File.get(tag);
+				if((tag==0x0D)||(tag=0x0F))
+				{
+					m_HasCR;	// remember file has endlines
+					break;	// stop counting
+				}
+				m_Offset++;	// count all other chars
+			}
 			break;	
 		case 'I':										// program ID
 			GetLabel(ProgramID,8);
@@ -683,10 +750,20 @@ int CObjectfile::SecondPass(CSegmentList *pSegments, CLabelList *pDefs, CLabelLi
 		while(pg4seg)									// walk the ref chain until link=0
 		{
 			link=pSegments->GetData(pg4segnb,pg4seg);	// get next link
-			if(link<0) return 1;						// error
+			if(link<0)									// bad link
+			{
+				cout << "Bad link in PG4SEG REF chain\n";
+				if(g_Log&0x02) g_Logfile << "Bad link in PG4SEG REF chain\n";
+				return 1;
+			}
 			i=pSegments->GetSegnumber(pg4segnb,pg4seg-2);	// get segment index for previous word
 			pSeg=(CSegment*)pSegments->GetAt(i);			// get segment at this index
-			if(pSeg==NULL) return 1;					// error
+			if(pSeg==NULL)								// not outside segment
+			{
+				cout << "PG4SEG not preceded by an address in another segment\n";
+				if(g_Log&0x02) g_Logfile << "PG4SEG not preceded by an address in another segment\n";
+				return 1;
+			}
 			pSegments->SetData(pg4segnb,pg4seg,pSeg->m_Page);	// replace link with page number
 			i=pSegments->GetSegnumber(pg4segnb,pg4seg);	// get segment number for segment-relative link
 			if(i!=0xFF)									// link is in a different segment
@@ -721,9 +798,9 @@ CLibrary::CLibrary(char* filename)
 //----------------------------------------------------------------------------------
 int CLibrary::Search(CSegmentList *pSegments, CLabelList *pDefs, CLabelList *pRefs, CAorgList *pAorgs, char *PsegName)
 {
-	char Name[7],Line[81],Filename[256];
+	char Name[7],Line[81],Filename[256],c;
 	char *pBuf;
-	int pos,res;
+	int pos,res,len,offset=0,i,j;
 	struct _stat buf;
 	CObjectfile *pObjectfile;
 
@@ -756,9 +833,28 @@ int CLibrary::Search(CSegmentList *pSegments, CLabelList *pDefs, CLabelList *pRe
 				} 
 				if((res=FirstPass(pSegments,pDefs,pRefs,pAorgs,PsegName))==0) break;	//  do first pass as with regular object file
 				m_Modules.RemoveAt(-1);
-				if(res!=2) return 1;					// error (error code 2 means link found: text library)
+				if(res!=2) return 1;					// error code 2 means link found: text library
 
-				GetLabel(Filename,255);					// grab file path
+				len=GetLabel(Filename,255);				// grab file path
+				for(i=0;i<len;i++) if(Filename[i]==' ') break; // find first space (in case offset follows)
+				Filename[i]=0x00;						// replace with endmark
+
+				for(offset=0,i++;i<len;i++)				// see if an offset follows (#xxxx in hex format)
+				{
+					if(Filename[i]=='#')				// offset found
+					{
+						for(j=1;j<=4;j++)				// decode 4 hex digits
+						{
+							c=Filename[i+j];			// grab one char
+							if(c<'0') break;			// illegal
+							else if(c<='9') offset=(offset*16)+(int)(c-'0');					
+							else if((c<'A')||(c>'F')) break;	// illegal
+							else offset=(offset*16)+(int)(c-'A')+10;
+						}
+						break;
+					}
+				}
+
 				if(_stat(Filename,&buf)!=0)				// check if file exists
 				{										// it does not: issue error
 					cout << "Object file " << Filename << " not found\n";	
@@ -766,8 +862,11 @@ int CLibrary::Search(CSegmentList *pSegments, CLabelList *pDefs, CLabelList *pRe
 						g_Logfile << "Object file " << Filename << " not found\n";
 					return g_ErrLevel;
 				}
+
 				pObjectfile=new CObjectfile(Filename);	// create file object
+				m_Start=offset;							// starting point
 				m_Objectfiles.Add((PTR)pObjectfile);	// memorize for second pass
+				if(offset) pObjectfile->Seek(offset);	// point at relevant offset
 				pObjectfile->FirstPass(pSegments,pDefs,pRefs,pAorgs,PsegName);	// first pass on this file
 				break;									// exit the for loop
 			}
@@ -796,7 +895,7 @@ int CLibrary::SecondPass(CSegmentList *pSegments, CLabelList *pDefs, CLabelList 
 	for(i=0;i<m_Objectfiles.GetSize();i++)				// iterate object files scanned on first pass (text library)	
 	{
 		pObjectfile=(CObjectfile*)m_Objectfiles.GetAt(i);	// get object file
-		pObjectfile->Seek(0);
+		pObjectfile->Seek(pObjectfile->m_Start);		// point at start of module
 		res=pObjectfile->SecondPass(pSegments,pDefs,pRefs,pAorgs);	// do second pass as with regular object file
 		if(res!=0) return res;							// report error
 	}
@@ -804,3 +903,4 @@ int CLibrary::SecondPass(CSegmentList *pSegments, CLabelList *pDefs, CLabelList 
 	return 0;											// report success
 }
 
+// TODO: if no end-of-line before tag F and tag : the M in copyright string ASSM99 causes error "Wrong segment size (tag M)"

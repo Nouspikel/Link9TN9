@@ -16,7 +16,7 @@ extern int g_Verbous;
 CLabel::CLabel()
 {
 	m_Name[0]=0;										// init empty name
-	m_Name[6]=0;										// extra 0 at end
+	m_Name[6]=m_Name[7]=m_Name[8]=0;					// extra 0 at end
 	m_Value=0;
 	m_SegIdx=0;
 	m_Type=0;
@@ -29,7 +29,7 @@ CLabel::CLabel()
 CLabel::CLabel(char* Label, int Value, int Tag, int SegNb)
 {
 	strcpy(m_Name,Label);								// copy name
-	m_Name[6]=0;										// extra 0 at end
+	m_Name[6]=m_Name[7]=m_Name[8]=0;					// extra 0 at end
 	m_Value=Value;
 	m_SegIdx=SegNb;
 	m_Type=Tag;

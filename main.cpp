@@ -6,6 +6,7 @@
 #include "scriptfile.h"
 #include "list.h"
 
+
 /*  LINKER STRATEGY
 
 - First pass through script. Grab memory model.Grab library files.
@@ -32,24 +33,29 @@ main(int argc, char *argv[])
 	CScriptfile Script;
 	char Line[257];
 
-	/*							TODO: THISPG not fixed with Bug99 script
+//	TODO: THISPG not fixed with Bug99 script
+
+/*	
+// Simulate command line for debug purposes
+// ----------------------------------------
 	char s0[]="HCD.spt";
 	char s1[]="-s";
 	char s2[]="Page3.spt";
 	char s3[]="-l";
-	char s4[]="stdmem.o,stub3.o";
+	char s4[]="Memory.o";
 	char s5[]="-o";
-	char s6[]="test.ea5,EA5,USBROM,USBRAM";
-	//argv[1]=s1;											
-	//argv[2]=s2;
-	//argv[3]=s3;
-	//argv[4]=s4;
+	char s6[]="Memory.ea5";
+
+	argv[1]=s3;											
+	argv[2]=s4;
+	argv[3]=s5;
+	argv[4]=s6;
 	//argv[5]=s5;
 	//argv[6]=s6;
 
-	argc=2;
-	argv[1]=s0;
+	argc=5;
 */
+
 	if(argc<2)											// no argument: command mode
 	{
 		Line[0]=' ';									// blank label field
@@ -134,12 +140,19 @@ main(int argc, char *argv[])
 				strcpy(Line," OUTPUT \"");
 				for(j=0;argv[i][j]!=0x00;j++)			// must insert double quotes around file name
 				{
-					if(argv[i][j]!=',') continue;		// first the first comma
+					if(argv[i][j]==',') break;			// first the first comma
+				}
+				if(argv[i][j]==',')						// comma encountered
+				{
 					argv[i][j]=0x00;					// end string here
 					strcat(Line+9,argv[i]);				// append it to command
 					strcat(Line+9+j,"\",");				// insert double quotes and comma
 					strcat(Line+10+j,argv[i]+j+1);		// append the rest of the string
-					break;
+				}
+				else									// end of string encountered
+				{
+					strcat(Line+9,argv[i]);				// append it to command
+					strcat(Line+9+j,"\"");				// insert double quotes and comma
 				}
 				Script.ParseLine(Line);
 			}
@@ -178,21 +191,23 @@ LOAD filename                           Declare a DF80 file for loading
 LIBRARY filename                        Declare a library of DF80 files to be used if needed
 PATH path                               Default file path, if not that of linker script
 LIBPATH path                            Default path for library files (can combine several with ; separator)
+GETDEF filename							Get label DEFs from a DF80 file, but don't load it
 
 OUTPUT "filename",format,label_list     Output a memory image file, format+ ea5|gk|fb6, label_list=comma-separeted list of blocks, pages or segments (incl. wildcards)
 OUTPUT "filename",format,$AORG          Output a memory image file for AORG stretches. Formats: EA5 GK FB6 or BIN
+MINGAP value                            Specifie how many missing bytes will cause a file to be split in two
+MAXSIZE value                           Maximum memimage file size (not counting header)
 
 SEGMENT name,flags                      Emulate segments assemblers that don't support them. Type=SCEG,DSEG,ESEG
 SEGEND                                  End of segment declared with SEGMENT
 SEGFLAG segment,flagson,flagsoff        Change segment flags (even if declared within DF80 file) Segment name can contain wildcards
+GHOST  list								Set flag for all segment in list, so loading code does not increase their size.
 
 STRATEGY                                Dispatching strategy: FIRST or LARGEST or list of segments (wildcards allowed) ! = erase existing list
 ASSIGN  segment,block,page,address      Manually assign a segment to a block/page/address page can be 0 for any page
 STUB block,segmentlist                  Assign segments to a block's stub (segment names can contain wildcards)
 OVERLAY block,segmentlist               Reserve a block for overlay and assign segments to it (segment names can contain wildcards)
 
-MINGAP value                            Specifie how many missing bytes will cause a file to be split in two
-MAXSIZE value                           Maximum memimage file size (not counting header)
 EQUATE label,value                      Define/modifie an internal label
 DEFINE label,value,tag,segnb            Create/redefine a DEF label (-1 or omitted value = no change)
 ERRORS value                            Error level to abort 0: never, 1: abort on errors 2: abort on warnings (default = 1)
@@ -240,9 +255,7 @@ GETVALUE
 GOTO
 COMMAND
 ENTRY address							Speficy the entry point of the program
-INCREMENTAL filename					Specify how to modify filenames when splitting a file
-GETDEF filename							Get label DEFs from a DF80 file, but don't load it
-NEWBLOCK								Causesthe linker to skip to the next memory block
+NEWBLOCK								Causes the linker to skip to the next memory block
 REBUILD [all]							Override incremental linking (i.e. don't check timestamps on files)
 PG4SEG									Verify the PG4SEG mechanism
 

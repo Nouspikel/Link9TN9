@@ -23,8 +23,8 @@ public:
 	CBlock();										// default constructor
 	~CBlock();										// destructor
 	CBlock(char* Name, int Type);					// constructor for devices and models
-	CBlock(char* Name, int Address, int Size,int Page, int Topage, int Step); // constructor for blocks
-	void Define(int Address, int ToAddr, int Page, int ToPage, int Step); // in case block is defined after construction
+	CBlock(char* Name, int Address, int Size,int Page, int Topage, int Step, int Memtype); // constructor for blocks
+	void Define(int Address, int ToAddr, int Page, int ToPage, int Step, int Memtype); // in case block is defined after construction
 	int GetPageSize(int page);						// calculate size of code loaded in one page (stubs+segments)
 	int Assign(void* pSeg, int ForcePage=-1, int ForceAddress=-1);	// assign a segment to a block (unconditionnally)
 	int AssignStub(void* pSegment);					// assign a segment as a stub
@@ -36,7 +36,7 @@ public:
 	void Reset(int what);
 	~CBlockList();									// destructor
 	CBlock* AddDevice(char* Name, int Type);		// add a device or a model
-	CBlock* AddBlock(char* Name, int Address, int ToAddr, int Page=0, int ToPage=0, int Step=1); // add a block
+	CBlock* AddBlock(char* Name, int Address, int ToAddr, int Page=0, int ToPage=0, int Step=1, int Memtype=0); // add a block
 	CBlock* Find(char* Name, int Type=-1);			// find a block by name (and optionally by type)
 	CBlock* OutputTable(char* Types=NULL, int* pCount=NULL);				// output memory table
 public:													
